@@ -129,6 +129,7 @@ DASH_WWW_DIR="${DASH_WWW_DIR}"
 STATUS_SHOW_CHOICE="${STATUS_SHOW_CHOICE}"
 STATUS_DOMAIN="${STATUS_DOMAIN}"
 STATUS_WWW_DIR="${STATUS_WWW_DIR}"
+STATUS_SITE_NAME="${STATUS_SITE_NAME}"
 VISITOR_TOKEN="${VISITOR_TOKEN}"
 EOF
 }
@@ -252,7 +253,8 @@ _build_dashboard() {
 #   $1 - 部署父目录，如 /var/www
 #   $2 - Server 域名（wss 后端）
 #   $3 - 访客 Token
-#   $4 - 强制重新编译标志 (force)
+#   $4 - 站点名称 (默认为 NodeGet 探针)
+#   $5 - 强制重新编译标志 (force)
 #   返回：0=成功 / 1=失败
 #   副作用：设置全局 STATUS_DIST_DIR
 # -----------------------------------------
@@ -260,7 +262,8 @@ _build_statusshow() {
   local www_dir="$1"
   local server_domain="$2"
   local visitor_token="$3"
-  local force_flag="$4"
+  local site_name="${4:-NodeGet 探针}"
+  local force_flag="$5"
   STATUS_DIST_DIR="${www_dir}/nodeget-statusshow/dist"
 
   _prepare_build_env
@@ -282,7 +285,7 @@ _build_statusshow() {
 
   # 计算环境哈希
   local new_commit=$(git rev-parse HEAD 2>/dev/null || echo "new")
-  local current_env_hash=$(echo "${new_commit}_${server_domain}_${visitor_token}" | md5sum | awk '{print $1}')
+  local current_env_hash=$(echo "${new_commit}_${server_domain}_${visitor_token}_${site_name}" | md5sum | awk '{print $1}')
 
   if [ "$force_flag" != "force" ] && [ -f ".build_hash" ] && [ "$(cat .build_hash)" == "$current_env_hash" ] && [ -d "dist" ]; then
     echo -e "${GREEN}⏩ 代码与配置参数均未变更，智能跳过 Status Show 编译。${RESET}"
@@ -305,7 +308,7 @@ _build_statusshow() {
   pnpm install
   export NODE_OPTIONS="--max_old_space_size=2048"
 
-  SITE_NAME='NodeGet 探针' \
+  SITE_NAME="$site_name" \
     SITE_FOOTER='Powered by NodeGet' \
     SITE_1="name=\"主控\",backend_url=\"wss://${server_domain}\",token=\"${visitor_token}\"" \
     pnpm run build
@@ -331,6 +334,15 @@ _prompt_visitor_token() {
   echo -e "${YELLOW}   注意：该 Token【不是】部署 Server 时生成的初始 Token！${RESET}"
   echo -e "${YELLOW}   您需要先登录 Dashboard，在 Token 选项中生成一个 visitor 权限的 Token。${RESET}"
   _prompt_input "▶ 请输入 Status Show 访问 Token" "$default_token" "VISITOR_TOKEN"
+}
+
+# -----------------------------------------
+# 公共：提示输入 Status Show 的站点名称
+#   副作用：设置全局变量 STATUS_SITE_NAME
+# -----------------------------------------
+_prompt_site_name() {
+  local default_name="${1:-NodeGet 探针}"
+  _prompt_input "▶ 请输入 Status Show 站点名称" "$default_name" "STATUS_SITE_NAME"
 }
 
 # =========================================================
@@ -363,6 +375,7 @@ deploy_nodeget() {
   if [[ "$STATUS_SHOW_CHOICE" =~ ^[Yy]$ ]]; then
     _prompt_input "请输入用于 Status Show 访问的域名 (如 status.xxx.com)" "$STATUS_DOMAIN" "STATUS_DOMAIN"
     _prompt_input "请输入 Status Show 部署目录" "${STATUS_WWW_DIR:-/var/www}" "STATUS_WWW_DIR"
+    _prompt_site_name "$STATUS_SITE_NAME"
   fi
 
   # ---- 系统环境准备 ----
@@ -437,9 +450,10 @@ deploy_nodeget() {
     fi
     if [ "$SKIP_STATUS" -eq 0 ]; then
       _prompt_visitor_token "$VISITOR_TOKEN"
+      _prompt_site_name "$STATUS_SITE_NAME"
       local s_flag=""
       [[ "$FORCE_STATUS" =~ ^[Yy]$ ]] && s_flag="force"
-      _build_statusshow "$STATUS_WWW_DIR" "$SERVER_DOMAIN" "$VISITOR_TOKEN" "$s_flag" || return 1
+      _build_statusshow "$STATUS_WWW_DIR" "$SERVER_DOMAIN" "$VISITOR_TOKEN" "$STATUS_SITE_NAME" "$s_flag" || return 1
     fi
   fi
 
@@ -582,7 +596,8 @@ update_nodeget() {
     echo -e "${YELLOW}Status Show 编译需要以下环境变量：${RESET}"
     _prompt_input "SERVER_DOMAIN (wss 后端域名，如 api.xxx.com)" "$SERVER_DOMAIN" "SERVER_DOMAIN"
     _prompt_visitor_token "$VISITOR_TOKEN"
-    _build_statusshow "$STATUS_WWW_DIR" "$SERVER_DOMAIN" "$VISITOR_TOKEN"
+    _prompt_site_name "$STATUS_SITE_NAME"
+    _build_statusshow "$STATUS_WWW_DIR" "$SERVER_DOMAIN" "$VISITOR_TOKEN" "$STATUS_SITE_NAME"
     _save_config
     ;;
   4)
@@ -616,7 +631,8 @@ update_nodeget() {
       echo -e "${YELLOW}Status Show 编译需要以下环境变量：${RESET}"
       _prompt_input "SERVER_DOMAIN (wss 后端域名，如 api.xxx.com)" "$SERVER_DOMAIN" "SERVER_DOMAIN"
       _prompt_visitor_token "$VISITOR_TOKEN"
-      _build_statusshow "$STATUS_WWW_DIR" "$SERVER_DOMAIN" "$VISITOR_TOKEN" || true
+      _prompt_site_name "$STATUS_SITE_NAME"
+      _build_statusshow "$STATUS_WWW_DIR" "$SERVER_DOMAIN" "$VISITOR_TOKEN" "$STATUS_SITE_NAME" || true
     fi
     _save_config
     ;;
