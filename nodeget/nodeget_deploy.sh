@@ -180,6 +180,11 @@ _load_config() {
       _restore_config_from_env
     fi
   fi
+  
+  # 兜底校验：如果目录路径不是绝对路径（以 / 开头），则强制重置为 /var/www
+  # 防止用户在旧版本中误将域名粘贴到目录输入框，导致历史配置污染
+  [[ -n "$DASH_WWW_DIR" && ! "$DASH_WWW_DIR" == /* ]] && DASH_WWW_DIR="/var/www"
+  [[ -n "$STATUS_WWW_DIR" && ! "$STATUS_WWW_DIR" == /* ]] && STATUS_WWW_DIR="/var/www"
 }
 
 # -----------------------------------------
