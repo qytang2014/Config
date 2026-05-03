@@ -483,14 +483,33 @@ uninstall_nodeget() {
   echo -e "\n${YELLOW}是否连带清理前端文件 (Dashboard/StatusShow) 与 Nginx 配置？[y/N]: ${RESET}"
   read -p "" CLEAN_ALL
   if [[ "$CLEAN_ALL" =~ ^[Yy]$ ]]; then
-    read -p "请输入要删除 Nginx 规则的域名 (空格隔开，回车跳过): " RM_DOMAINS
+    _load_config
+    local default_rm_domains=""
+    for d in "$SERVER_DOMAIN" "$DASH_DOMAIN" "$STATUS_DOMAIN"; do
+      [ -n "$d" ] && default_rm_domains="${default_rm_domains} ${d}"
+    done
+    # 去除首尾多余空格
+    default_rm_domains=$(echo "$default_rm_domains" | xargs)
+
+    if [ -n "$default_rm_domains" ]; then
+      read -p "请输入要删除 Nginx 规则的域名 (空格隔开) [回车删除默认: ${default_rm_domains}]: " RM_DOMAINS
+      RM_DOMAINS=${RM_DOMAINS:-$default_rm_domains}
+    else
+      read -p "请输入要删除 Nginx 规则的域名 (空格隔开，回车跳过): " RM_DOMAINS
+    fi
+
     for dom in $RM_DOMAINS; do
       [ -f "/etc/nginx/conf.d/${dom}.conf" ] &&
         rm -f "/etc/nginx/conf.d/${dom}.conf" &&
         echo -e "${GREEN}✅ 已删除 Nginx 配置: ${dom}.conf${RESET}"
     done
     systemctl reload nginx 2>/dev/null
-    rm -rf /var/www/nodeget-board /var/www/nodeget-statusshow
+    
+    # 清理实际部署的目录，兼容自定义路径
+    local dash_dir="${DASH_WWW_DIR:-/var/www}/nodeget-board"
+    local status_dir="${STATUS_WWW_DIR:-/var/www}/nodeget-statusshow"
+    rm -rf "$dash_dir" "$status_dir"
+    
     rm -f /etc/nodeget/deploy.conf
     echo -e "${GREEN}✅ 残留清理完毕！${RESET}"
   fi
